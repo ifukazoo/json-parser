@@ -1,5 +1,6 @@
 use json_parser::lexer;
 use json_parser::parser;
+use json_parser::printer;
 use std::io;
 use std::io::Read;
 
@@ -15,6 +16,12 @@ fn main() {
     for elem in &tokens {
         println!("{:?}", elem);
     }
-    let value = parser::parse(tokens, &input);
-    println!("{:?}", value);
+
+    match parser::parse(tokens, &input) {
+        Ok(value) => {
+            println!("{:?}", value);
+            println!("{}", printer::print(&value));
+        }
+        Err(err) => println!("{:?}", err),
+    }
 }

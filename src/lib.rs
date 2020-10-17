@@ -11,3 +11,4 @@
 //! * parseで値を作らずに, 評価機を別途作ってもよかった.
 pub mod lexer;
 pub mod parser;
+pub mod printer;

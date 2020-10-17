@@ -26,11 +26,6 @@ pub enum TokenKind {
     /// true, false, null, a, abc, ...
     CharSeq,
     /// "key"
-    ///```
-    /// "k
-    ///  e
-    ///  y"
-    ///```
     StrBody,
     /// 不正なトークン
     IllegalToken,
