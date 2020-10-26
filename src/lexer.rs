@@ -138,6 +138,7 @@ where
 }
 
 // `"`に囲まれた範囲. 間に空白文字も含む
+// illegallな場合は, 先頭の`"`を不正なトークンの始まり位置と考える.
 fn lex_strbody<Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
 where
     Tokens: Iterator<Item = char>,
