@@ -71,9 +71,9 @@ where
         Some(Digits) | Some(Minus) => parse_number(tokens, chars),
         Some(CharSeq) => parse_charseq(tokens, chars),
         Some(StrBody) => parse_string(tokens, chars),
-        Some(LBrace) => parse_array(tokens, chars),
-        Some(LParen) => parse_obj(tokens, chars),
-        // RBrace,  RParen, Comma, Colon, => NG
+        Some(LBracket) => parse_array(tokens, chars),
+        Some(LBrace) => parse_obj(tokens, chars),
+        // RBracket,  RBrace, Comma, Colon, => NG
         Some(_) => Err(ParseError::UnexpectedToken(tokens.next().unwrap())),
         // 予期せぬ終了
         None => Err(ParseError::UnexpectedEOF),
@@ -173,13 +173,13 @@ where
     use TokenKind::*;
 
     // 最初の `[` を刈り取り
-    expect_peek(tokens, LBrace)?;
+    expect_peek(tokens, LBracket)?;
 
     match tokens.peek().map(|token| &token.kind) {
         // 閉じてない
         None => Err(ParseError::UnclosedParenOrBrace),
         // 空のArray
-        Some(RBrace) => Ok(JSONValue::Array(Vec::new())),
+        Some(RBracket) => Ok(JSONValue::Array(Vec::new())),
         // illegal
         Some(IllegalToken) => Err(ParseError::IllegalToken(tokens.next().unwrap())),
         // なにかしらのトークン
@@ -192,7 +192,7 @@ where
                     Some(Comma) => {
                         tokens.next().unwrap(); // `,` 刈り取り. continue
                     }
-                    Some(RBrace) => {
+                    Some(RBracket) => {
                         tokens.next().unwrap(); // `]`刈り取り
                         return Ok(JSONValue::Array(arr_values));
                     }
@@ -211,13 +211,13 @@ where
     use TokenKind::*;
 
     // 最初の `{` を刈り取り
-    expect_peek(tokens, LParen)?;
+    expect_peek(tokens, LBrace)?;
 
     match tokens.peek().map(|token| &token.kind) {
         // 閉じてない
         None => Err(ParseError::UnclosedParenOrBrace),
         // 空オブジェクト
-        Some(RParen) => Ok(JSONValue::Object(HashMap::new())),
+        Some(RBrace) => Ok(JSONValue::Object(HashMap::new())),
         // illegal
         Some(IllegalToken) => Err(ParseError::IllegalToken(tokens.next().unwrap())),
         // なにかしらのトークン
@@ -235,7 +235,7 @@ where
                     Some(Comma) => {
                         tokens.next().unwrap();
                     }
-                    Some(RParen) => {
+                    Some(RBrace) => {
                         tokens.next().unwrap();
                         return Ok(JSONValue::Object(key_values));
                     }
@@ -300,7 +300,7 @@ mod test {
     #[test]
     fn test_parse_expected_token_ok() {
         let inputs = vec![r#""""#, "}", "]"];
-        let expected = vec![StrBody, RParen, RBrace];
+        let expected = vec![StrBody, RBrace, RBracket];
 
         for (i, _) in inputs.iter().enumerate() {
             let tokens = lexer::lex(&inputs[i]).0;
@@ -315,13 +315,13 @@ mod test {
     #[test]
     fn test_parse_expected_token_ng1() {
         let input = "{";
-        let expected = RBrace;
+        let expected = RBracket;
 
         let tokens = lexer::lex(input).0;
         let mut tokens = tokens.into_iter().peekable();
         assert_eq!(
             Err(ParseError::UnexpectedToken(Token {
-                kind: LParen,
+                kind: LBrace,
                 loc: Location(0, 1)
             })),
             expect_peek(&mut tokens, expected.clone())

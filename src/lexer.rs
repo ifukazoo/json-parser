@@ -4,13 +4,13 @@ use std::iter::Peekable;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// [
-    LBrace,
+    LBracket,
     /// ]
-    RBrace,
+    RBracket,
     /// {
-    LParen,
+    LBrace,
     /// }
-    RParen,
+    RBrace,
     /// ,
     Comma,
     /// :
@@ -82,10 +82,10 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<char>) {
             pos = after_pos;
         } else {
             match c {
-                '[' => tokens.push(Token::new(LBrace, pos, pos + 1)),
-                ']' => tokens.push(Token::new(RBrace, pos, pos + 1)),
-                '{' => tokens.push(Token::new(LParen, pos, pos + 1)),
-                '}' => tokens.push(Token::new(RParen, pos, pos + 1)),
+                '[' => tokens.push(Token::new(LBracket, pos, pos + 1)),
+                ']' => tokens.push(Token::new(RBracket, pos, pos + 1)),
+                '{' => tokens.push(Token::new(LBrace, pos, pos + 1)),
+                '}' => tokens.push(Token::new(RBrace, pos, pos + 1)),
                 ',' => tokens.push(Token::new(Comma, pos, pos + 1)),
                 '.' => tokens.push(Token::new(Dot, pos, pos + 1)),
                 '+' => tokens.push(Token::new(Plus, pos, pos + 1)),
@@ -256,10 +256,10 @@ fn lex_symbols() {
     use TokenKind::*;
     let input = r#"{}[]"#;
     let expect = vec![
-        Token::new(LParen, 0, 1),
-        Token::new(RParen, 1, 2),
-        Token::new(LBrace, 2, 3),
-        Token::new(RBrace, 3, 4),
+        Token::new(LBrace, 0, 1),
+        Token::new(RBrace, 1, 2),
+        Token::new(LBracket, 2, 3),
+        Token::new(RBracket, 3, 4),
     ];
     assert_eq!(expect, lex(input).0);
 }
