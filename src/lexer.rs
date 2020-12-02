@@ -58,13 +58,16 @@ impl Token {
     }
 }
 
+pub type LexResult = (Vec<Token>, Vec<char>);
+
 /// 入力からTokenの配列と入力をcharのsliceに変換したものを返す.
 /// * char単位だと簡単に複数バイト文字が扱えるのでcharのsliceベースで処理することにする.
 /// * 位置情報がchar slice内の値となるので, 返す位置情報とリンクするcharのスライスを合わせて返す
-pub fn lex(input: &str) -> (Vec<Token>, Vec<char>) {
+pub fn lex(input: &str) -> LexResult {
     use TokenKind::*;
     let mut tokens = Vec::new();
-    let mut peekable = input.chars().peekable();
+    let chars = input.chars().collect::<Vec<char>>();
+    let mut peekable = chars.iter().peekable();
     let mut pos = 0;
     while let Some(c) = peekable.peek() {
         if c.is_digit(10) {
@@ -75,8 +78,8 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<char>) {
             let (token, after_pos) = lex_chars(&mut peekable, pos);
             tokens.push(token);
             pos = after_pos;
-        } else if *c == '"' {
-            // peekは借用である
+        } else if *c == &'"' {
+            // cは参照の参照なので
             let (token, after_pos) = lex_strbody(&mut peekable, pos);
             tokens.push(token);
             pos = after_pos;
@@ -98,14 +101,14 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<char>) {
             pos += 1;
         }
     }
-    (tokens, input.chars().collect::<Vec<char>>())
+    (tokens, chars)
 }
 
 // 数列
 // 0, 1, 12, 01, ...
-fn lex_digits<Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
+fn lex_digits<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
 where
-    Tokens: Iterator<Item = char>,
+    Tokens: Iterator<Item = &'a char>,
 {
     let mut pos = start;
     while let Some(c) = input.peek() {
@@ -121,9 +124,9 @@ where
 
 // アルファベットの列
 // a, A, aB, ABC
-fn lex_chars<Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
+fn lex_chars<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
 where
-    Tokens: Iterator<Item = char>,
+    Tokens: Iterator<Item = &'a char>,
 {
     let mut pos = start;
     while let Some(c) = input.peek() {
@@ -139,9 +142,9 @@ where
 
 // `"`に囲まれた範囲. 間に空白文字も含む
 // illegallな場合は, 先頭の`"`を不正なトークンの始まり位置と考える.
-fn lex_strbody<Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
+fn lex_strbody<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, usize)
 where
-    Tokens: Iterator<Item = char>,
+    Tokens: Iterator<Item = &'a char>,
 {
     use TokenKind::*;
 
@@ -168,7 +171,7 @@ where
                     pos += 1;
                     if c.is_ascii_control() {
                         return (Token::new(IllegalToken, start, pos), pos);
-                    } else if c == '\\' {
+                    } else if *c == '\\' {
                         match lex_after_bs(input, pos) {
                             Ok(pos_new) => pos = pos_new,
                             Err(pos_new) => {
@@ -187,9 +190,9 @@ where
 }
 
 // `\`以降の文字
-fn lex_after_bs<Tokens>(input: &mut Peekable<Tokens>, start: usize) -> Result<usize, usize>
+fn lex_after_bs<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> Result<usize, usize>
 where
-    Tokens: Iterator<Item = char>,
+    Tokens: Iterator<Item = &'a char>,
 {
     let mut pos = start;
 
@@ -203,7 +206,7 @@ where
                 '\"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => Ok(pos),
                 //`\u1234`
                 'u' => {
-                    let hex_4 = input.take(4).collect::<Vec<char>>();
+                    let hex_4 = input.take(4).map(|&c| c).collect::<Vec<char>>();
                     pos = pos + hex_4.len();
                     if hex_4.len() != 4 {
                         Err(pos)
@@ -299,7 +302,9 @@ fn lex_strbody_ok() {
     ];
 
     for (i, input) in inputs.iter().enumerate() {
-        assert_eq!(expect[i], lex_strbody(&mut input.chars().peekable(), 0).0);
+        let input = input.chars().collect::<Vec<char>>();
+        let mut input = input.iter().peekable();
+        assert_eq!(expect[i], lex_strbody(&mut input, 0).0);
     }
 }
 #[test]
@@ -341,7 +346,9 @@ fn lex_strbody_ng() {
     ];
 
     for (i, input) in inputs.iter().enumerate() {
-        assert_eq!(expect[i], lex_strbody(&mut input.chars().peekable(), 0).0);
+        let input = input.chars().collect::<Vec<char>>();
+        let mut input = input.iter().peekable();
+        assert_eq!(expect[i], lex_strbody(&mut input, 0).0);
     }
 }
 
@@ -350,8 +357,7 @@ fn lex_strbody_check() {
     use TokenKind::*;
     let input = r#""ab\u1234""#;
     let expect = Token::new(StrBody, 0, 10);
-    let tokens = lex(input);
-    println!("{:?}", tokens);
-
-    assert_eq!(expect, lex_strbody(&mut input.chars().peekable(), 0).0);
+    let input = input.chars().collect::<Vec<char>>();
+    let mut input = input.iter().peekable();
+    assert_eq!(expect, lex_strbody(&mut input, 0).0);
 }
