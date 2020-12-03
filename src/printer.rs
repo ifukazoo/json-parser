@@ -51,8 +51,8 @@ fn print_obj(h: &HashMap<String, JSONValue>) -> String {
 
 #[cfg(test)]
 mod test {
+    use super::super::parser;
     use super::super::printer;
-    use super::super::*;
 
     #[test]
     fn test_print_num() {
@@ -60,7 +60,7 @@ mod test {
         let expected = vec!["12.3", "true", "false", "null", "[1,\"str\",true]"];
 
         for (i, _) in inputs.iter().enumerate() {
-            let json = parser::parse(lexer::lex(&inputs[i])).unwrap();
+            let json = inputs[i].parse::<parser::JSONValue>().unwrap();
             let s = printer::print(&json);
             assert_eq!(s, expected[i]);
         }

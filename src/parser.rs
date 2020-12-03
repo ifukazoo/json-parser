@@ -1,8 +1,10 @@
+use super::lexer;
 use super::lexer::LexResult;
 use super::lexer::Token;
 use super::lexer::TokenKind;
 use std::collections::HashMap;
 use std::iter::Peekable;
+use std::str::FromStr;
 
 /// JSON値
 #[derive(Debug, Clone, PartialEq)]
@@ -13,6 +15,13 @@ pub enum JSONValue {
     Object(HashMap<String, JSONValue>),
     Array(Vec<JSONValue>),
     Null,
+}
+
+impl FromStr for JSONValue {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse(lexer::lex(s))
+    }
 }
 
 /// パースエラー
@@ -36,12 +45,11 @@ pub enum ParseError {
 ///use json_parser::lexer;
 ///use json_parser::parser;
 ///use parser::JSONValue;
-///use parser::parse;
 ///
 ///let input = r#"{
 ///    "key":1.0
 ///}"#;
-///let value = parse(lexer::lex(input));
+///let value = input.parse::<parser::JSONValue>();
 ///assert_eq!(
 ///    Ok(JSONValue::Object(
 ///        [("key".to_string(), JSONValue::Num(1f64))]
@@ -53,7 +61,7 @@ pub enum ParseError {
 ///);
 /// ```
 ///
-pub fn parse(lex_result: LexResult) -> Result<JSONValue, ParseError> {
+fn parse(lex_result: LexResult) -> Result<JSONValue, ParseError> {
     let tokens = lex_result.0;
     let mut peekable = tokens.into_iter().peekable();
     let chars = lex_result.1;

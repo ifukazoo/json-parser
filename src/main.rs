@@ -1,4 +1,3 @@
-use json_parser::lexer;
 use json_parser::parser;
 use json_parser::printer;
 use std::io;
@@ -12,7 +11,8 @@ fn main() {
     let mut buf = String::new();
     stdin.read_to_string(&mut buf).unwrap();
 
-    match parser::parse(lexer::lex(&buf)) {
+    // from_strを使う
+    match buf.parse::<parser::JSONValue>() {
         Ok(value) => {
             println!("{:?}", value);
             println!("{}", printer::print(&value));
