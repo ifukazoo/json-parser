@@ -12,12 +12,7 @@ fn main() {
     let mut buf = String::new();
     stdin.read_to_string(&mut buf).unwrap();
 
-    let (tokens, input) = lexer::lex(&buf);
-    for elem in &tokens {
-        println!("{:?}", elem);
-    }
-
-    match parser::parse(tokens, &input) {
+    match parser::parse(lexer::lex(&buf)) {
         Ok(value) => {
             println!("{:?}", value);
             println!("{}", printer::print(&value));

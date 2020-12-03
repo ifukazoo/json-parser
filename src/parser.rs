@@ -1,3 +1,4 @@
+use super::lexer::LexResult;
 use super::lexer::Token;
 use super::lexer::TokenKind;
 use std::collections::HashMap;
@@ -40,8 +41,7 @@ pub enum ParseError {
 ///let input = r#"{
 ///    "key":1.0
 ///}"#;
-///let (tokens, chars) = lexer::lex(input);
-///let value = parse(tokens, &chars);
+///let value = parse(lexer::lex(input));
 ///assert_eq!(
 ///    Ok(JSONValue::Object(
 ///        [("key".to_string(), JSONValue::Num(1f64))]
@@ -53,9 +53,11 @@ pub enum ParseError {
 ///);
 /// ```
 ///
-pub fn parse(tokens: Vec<Token>, chars: &[char]) -> Result<JSONValue, ParseError> {
-    let mut tokens = tokens.into_iter().peekable();
-    parse_value(&mut tokens, &chars)
+pub fn parse(lex_result: LexResult) -> Result<JSONValue, ParseError> {
+    let tokens = lex_result.0;
+    let mut peekable = tokens.into_iter().peekable();
+    let chars = lex_result.1;
+    parse_value(&mut peekable, &chars)
 }
 
 fn parse_value<Tokens>(
@@ -330,22 +332,19 @@ mod test {
     #[test]
     fn parser_number() {
         let input = "12345";
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Num(12345 as f64)), value);
     }
     #[test]
     fn parser_number2() {
         let input = "-12345";
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Num(-12345 as f64)), value);
     }
     #[test]
     fn parser_number3() {
         let input = "0";
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Num(0.0)), value);
     }
     #[test]
@@ -358,39 +357,34 @@ mod test {
             ("-1234.56", -1234.56),
         ];
         for t in inputs {
-            let (tokens, input) = lexer::lex(t.0);
-            let value = parse(tokens, &input);
+            let value = parse(lexer::lex(t.0));
             assert_eq!(Ok(JSONValue::Num(t.1)), value);
         }
     }
     #[test]
     fn parser_bool_false() {
         let input = "false";
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Bool(false)), value);
     }
 
     #[test]
     fn parser_null() {
         let input = " null ";
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Null), value);
     }
 
     #[test]
     fn parser_string() {
         let input = r#""helloWORLD""#;
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Str("helloWORLD".to_string())), value);
     }
     #[test]
     fn parser_bool_true() {
         let input = "true";
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Bool(true)), value);
     }
 
@@ -402,16 +396,14 @@ mod test {
             JSONValue::Num(123 as f64),
             JSONValue::Str("hello".to_string()),
         ];
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Array(arr)), value);
     }
     #[test]
     fn parser_array2() {
         let input = " [ ] ";
         let arr = vec![];
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Array(arr)), value);
     }
     #[test]
@@ -423,8 +415,7 @@ mod test {
             map
         });
 
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(obj), value);
     }
     #[test]
@@ -436,8 +427,7 @@ mod test {
             map
         });
 
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(obj), value);
     }
     #[test]
@@ -449,8 +439,7 @@ mod test {
             map
         });
 
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(obj), value);
     }
     #[test]
@@ -467,8 +456,7 @@ mod test {
             map
         });
 
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(obj), value);
     }
     #[test]
@@ -476,8 +464,7 @@ mod test {
         let input = r#"{}"#;
         let obj = JSONValue::Object(HashMap::new());
 
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(obj), value);
     }
     #[test]
@@ -490,8 +477,7 @@ mod test {
         });
 
         let arr = vec![obj];
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Array(arr)), value);
     }
     #[test]
@@ -509,8 +495,7 @@ mod test {
         });
 
         let arr = vec![obj, obj2];
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Array(arr)), value);
     }
     #[test]
@@ -524,8 +509,7 @@ mod test {
         let obj2 = JSONValue::Num(1f64);
 
         let arr = vec![obj2, obj];
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(Ok(JSONValue::Array(arr)), value);
     }
     #[test]
@@ -533,8 +517,7 @@ mod test {
         let input = r#"{
             "key":1.0
         }"#;
-        let (tokens, input) = lexer::lex(input);
-        let value = parse(tokens, &input);
+        let value = parse(lexer::lex(input));
         assert_eq!(
             Ok(JSONValue::Object(
                 [("key".to_string(), JSONValue::Num(1f64))]

@@ -60,8 +60,7 @@ mod test {
         let expected = vec!["12.3", "true", "false", "null", "[1,\"str\",true]"];
 
         for (i, _) in inputs.iter().enumerate() {
-            let (tokens, chars) = lexer::lex(&inputs[i]);
-            let json = parser::parse(tokens, &chars).unwrap();
+            let json = parser::parse(lexer::lex(&inputs[i])).unwrap();
             let s = printer::print(&json);
             assert_eq!(s, expected[i]);
         }
