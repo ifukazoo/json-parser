@@ -62,27 +62,23 @@ pub enum ParseError {
 /// ```
 ///
 fn parse(lex_result: LexResult) -> Result<JSONValue, ParseError> {
-    let tokens = lex_result.0;
+    let tokens = lex_result;
     let mut peekable = tokens.into_iter().peekable();
-    let chars = lex_result.1;
-    parse_value(&mut peekable, &chars)
+    parse_value(&mut peekable)
 }
 
-fn parse_value<Tokens>(
-    tokens: &mut Peekable<Tokens>,
-    chars: &[char],
-) -> Result<JSONValue, ParseError>
+fn parse_value<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<JSONValue, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
     use TokenKind::*;
 
     match tokens.peek().map(|token| &token.kind) {
-        Some(Digits) | Some(Minus) => parse_number(tokens, chars),
-        Some(CharSeq) => parse_charseq(tokens, chars),
-        Some(StrBody) => parse_string(tokens, chars),
-        Some(LBracket) => parse_array(tokens, chars),
-        Some(LBrace) => parse_obj(tokens, chars),
+        Some(Digits) | Some(Minus) => parse_number(tokens),
+        Some(CharSeq) => parse_charseq(tokens),
+        Some(StrBody) => parse_string(tokens),
+        Some(LBracket) => parse_array(tokens),
+        Some(LBrace) => parse_obj(tokens),
         // RBracket,  RBrace, Comma, Colon, => NG
         Some(_) => Err(ParseError::UnexpectedToken(tokens.next().unwrap())),
         // 予期せぬ終了
@@ -90,10 +86,7 @@ where
     }
 }
 
-fn parse_number<Tokens>(
-    tokens: &mut Peekable<Tokens>,
-    chars: &[char],
-) -> Result<JSONValue, ParseError>
+fn parse_number<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<JSONValue, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
@@ -110,7 +103,7 @@ where
 
     // 整数部
     let token = expect_peek(tokens, Digits)?;
-    let integer = extra_literal(&token, chars);
+    let integer = extra_literal(&token);
     let integer = if integer.starts_with("0") {
         if integer.len() != 1 {
             // 01, 012, .. => NG
@@ -126,7 +119,7 @@ where
         Some(Dot) => {
             expect_peek(tokens, Dot)?; // "`.`刈り取り"
             let token = expect_peek(tokens, Digits)?; // `.`のあとを刈り取り
-            let f = extra_literal(&token, chars);
+            let f = extra_literal(&token);
             let f = format!("0.{}", f);
             f.parse::<f64>().unwrap()
         }
@@ -139,17 +132,14 @@ where
     Ok(JSONValue::Num(value as f64))
 }
 
-fn parse_charseq<Tokens>(
-    tokens: &mut Peekable<Tokens>,
-    chars: &[char],
-) -> Result<JSONValue, ParseError>
+fn parse_charseq<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<JSONValue, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
     use TokenKind::*;
 
     let token = expect_peek(tokens, CharSeq)?;
-    let char_seq = extra_literal(&token, chars);
+    let char_seq = extra_literal(&token);
     match char_seq.as_ref() {
         "true" => Ok(JSONValue::Bool(true)),
         "false" => Ok(JSONValue::Bool(false)),
@@ -158,25 +148,19 @@ where
     }
 }
 
-fn parse_string<Tokens>(
-    tokens: &mut Peekable<Tokens>,
-    chars: &[char],
-) -> Result<JSONValue, ParseError>
+fn parse_string<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<JSONValue, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
     use TokenKind::*;
 
     let token = expect_peek(tokens, StrBody)?;
-    let s = extra_literal(&token, chars);
+    let s = extra_literal(&token);
     // 両端の`"`を除去
     Ok(JSONValue::Str(String::from(s.trim_matches('"'))))
 }
 
-fn parse_array<Tokens>(
-    tokens: &mut Peekable<Tokens>,
-    chars: &[char],
-) -> Result<JSONValue, ParseError>
+fn parse_array<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<JSONValue, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
@@ -196,7 +180,7 @@ where
         Some(_) => {
             let mut arr_values: Vec<JSONValue> = Vec::new();
             loop {
-                let v = parse_value(tokens, chars)?;
+                let v = parse_value(tokens)?;
                 arr_values.push(v);
                 match tokens.peek().map(|token| &token.kind) {
                     Some(Comma) => {
@@ -214,7 +198,7 @@ where
     }
 }
 
-fn parse_obj<Tokens>(tokens: &mut Peekable<Tokens>, chars: &[char]) -> Result<JSONValue, ParseError>
+fn parse_obj<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<JSONValue, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
@@ -235,11 +219,11 @@ where
             let mut key_values = HashMap::new();
             loop {
                 // keyの刈り取り
-                let key = parse_objkey(tokens, chars)?;
+                let key = parse_objkey(tokens)?;
                 // コロンの刈り取り
                 expect_peek(tokens, Colon)?;
                 // 値の刈り取り
-                key_values.insert(key, parse_value(tokens, chars)?);
+                key_values.insert(key, parse_value(tokens)?);
 
                 match tokens.peek().map(|token| &token.kind) {
                     Some(Comma) => {
@@ -257,11 +241,11 @@ where
     }
 }
 
-fn parse_objkey<Tokens>(tokens: &mut Peekable<Tokens>, chars: &[char]) -> Result<String, ParseError>
+fn parse_objkey<Tokens>(tokens: &mut Peekable<Tokens>) -> Result<String, ParseError>
 where
     Tokens: Iterator<Item = Token>,
 {
-    if let JSONValue::Str(key) = parse_string(tokens, chars)? {
+    if let JSONValue::Str(key) = parse_string(tokens)? {
         Ok(key)
     } else {
         // string以外がくることはない
@@ -289,15 +273,8 @@ where
 }
 
 // 入力文字列からトークンが示す範囲の文字列を抽出する
-fn extra_literal(token: &Token, chars: &[char]) -> String {
-    use super::lexer::Location;
-
-    // locationを抽出
-    let Token {
-        kind: _,
-        loc: Location(start, end),
-    } = token;
-    chars[*start..*end].iter().collect::<String>()
+fn extra_literal(token: &Token) -> String {
+    token.literal.clone()
 }
 
 #[cfg(test)]
@@ -313,9 +290,14 @@ mod test {
         let expected = vec![StrBody, RBrace, RBracket];
 
         for (i, _) in inputs.iter().enumerate() {
-            let tokens = lexer::lex(&inputs[i]).0;
+            let tokens = lexer::lex(&inputs[i]);
             let mut tokens = tokens.into_iter().peekable();
-            if let Ok(Token { kind, loc: _ }) = expect_peek(&mut tokens, expected[i].clone()) {
+            if let Ok(Token {
+                kind,
+                literal: _,
+                loc: _,
+            }) = expect_peek(&mut tokens, expected[i].clone())
+            {
                 assert_eq!(expected[i], kind);
             } else {
                 panic!("");
@@ -327,11 +309,12 @@ mod test {
         let input = "{";
         let expected = RBracket;
 
-        let tokens = lexer::lex(input).0;
+        let tokens = lexer::lex(input);
         let mut tokens = tokens.into_iter().peekable();
         assert_eq!(
             Err(ParseError::UnexpectedToken(Token {
                 kind: LBrace,
+                literal: String::from(input),
                 loc: Location(0, 1)
             })),
             expect_peek(&mut tokens, expected.clone())

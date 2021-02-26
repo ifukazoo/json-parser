@@ -45,24 +45,26 @@ pub struct Location(
 pub struct Token {
     // 種別
     pub kind: TokenKind,
+    // リテラル
+    pub literal: String,
     // 位置
     pub loc: Location,
 }
 
 impl Token {
-    fn new(kind: TokenKind, start: usize, end: usize) -> Self {
+    fn new(kind: TokenKind, literal: String, start: usize, end: usize) -> Self {
         Self {
             kind,
+            literal,
             loc: Location(start, end),
         }
     }
 }
 
-pub type LexResult = (Vec<Token>, Vec<char>);
+pub type LexResult = Vec<Token>;
 
 /// 入力からTokenの配列と入力をcharのsliceに変換したものを返す.
 /// * char単位だと簡単に複数バイト文字が扱えるのでcharのsliceベースで処理することにする.
-/// * 位置情報がchar slice内の値となるので, 返す位置情報とリンクするcharのスライスを合わせて返す
 pub fn lex(input: &str) -> LexResult {
     use TokenKind::*;
     let mut tokens = Vec::new();
@@ -84,24 +86,25 @@ pub fn lex(input: &str) -> LexResult {
             tokens.push(token);
             pos = after_pos;
         } else {
+            let literal = c.to_string();
             match c {
-                '[' => tokens.push(Token::new(LBracket, pos, pos + 1)),
-                ']' => tokens.push(Token::new(RBracket, pos, pos + 1)),
-                '{' => tokens.push(Token::new(LBrace, pos, pos + 1)),
-                '}' => tokens.push(Token::new(RBrace, pos, pos + 1)),
-                ',' => tokens.push(Token::new(Comma, pos, pos + 1)),
-                '.' => tokens.push(Token::new(Dot, pos, pos + 1)),
-                '+' => tokens.push(Token::new(Plus, pos, pos + 1)),
-                '-' => tokens.push(Token::new(Minus, pos, pos + 1)),
-                ':' => tokens.push(Token::new(Colon, pos, pos + 1)),
+                '[' => tokens.push(Token::new(LBracket, literal, pos, pos + 1)),
+                ']' => tokens.push(Token::new(RBracket, literal, pos, pos + 1)),
+                '{' => tokens.push(Token::new(LBrace, literal, pos, pos + 1)),
+                '}' => tokens.push(Token::new(RBrace, literal, pos, pos + 1)),
+                ',' => tokens.push(Token::new(Comma, literal, pos, pos + 1)),
+                '.' => tokens.push(Token::new(Dot, literal, pos, pos + 1)),
+                '+' => tokens.push(Token::new(Plus, literal, pos, pos + 1)),
+                '-' => tokens.push(Token::new(Minus, literal, pos, pos + 1)),
+                ':' => tokens.push(Token::new(Colon, literal, pos, pos + 1)),
                 ' ' | '\n' | '\r' | '\t' => { /* white spece 読み飛ばし*/ }
-                _ => tokens.push(Token::new(IllegalToken, pos, pos + 1)),
+                _ => tokens.push(Token::new(IllegalToken, literal, pos, pos + 1)),
             };
             peekable.next().unwrap();
             pos += 1;
         }
     }
-    (tokens, chars)
+    tokens
 }
 
 // 数列
@@ -110,16 +113,18 @@ fn lex_digits<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token,
 where
     Tokens: Iterator<Item = &'a char>,
 {
+    let mut s = String::new();
     let mut pos = start;
     while let Some(c) = input.peek() {
         if c.is_digit(10) {
+            s.push(**c);
             input.next().unwrap();
             pos += 1;
         } else {
             break;
         }
     }
-    (Token::new(TokenKind::Digits, start, pos), pos)
+    (Token::new(TokenKind::Digits, s, start, pos), pos)
 }
 
 // アルファベットの列
@@ -128,16 +133,18 @@ fn lex_chars<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> (Token, 
 where
     Tokens: Iterator<Item = &'a char>,
 {
+    let mut s = String::new();
     let mut pos = start;
     while let Some(c) = input.peek() {
         if c.is_alphabetic() {
+            s.push(**c);
             input.next().unwrap();
             pos += 1;
         } else {
             break;
         }
     }
-    (Token::new(TokenKind::CharSeq, start, pos), pos)
+    (Token::new(TokenKind::CharSeq, s, start, pos), pos)
 }
 
 // `"`に囲まれた範囲. 間に空白文字も含む
@@ -148,34 +155,47 @@ where
 {
     use TokenKind::*;
 
+    let mut literal = String::new();
     let mut pos = start;
 
     // 先頭の`"`を刈り取り
-    input.next().unwrap();
+    let c = input.next().unwrap();
+    literal.push(*c);
     pos += 1;
 
     if let None = input.peek() {
-        (Token::new(TokenKind::IllegalToken, start, pos), pos)
+        (Token::new(IllegalToken, literal, start, pos), pos)
     } else if let Some('"') = input.peek() {
         // 空文字列
-        input.next().unwrap();
+        let c = input.next().unwrap();
+        literal.push(*c);
         pos += 1;
-        (Token::new(TokenKind::StrBody, start, pos), pos)
+        (Token::new(StrBody, literal, start, pos), pos)
     } else {
         loop {
             match input.next() {
                 // 終了
-                Some('"') => return (Token::new(StrBody, start, pos + 1), pos + 1),
+                Some('"') => {
+                    literal.push('"');
+                    pos += 1;
+                    return (Token::new(StrBody, literal, start, pos), pos);
+                }
                 // 何らかのchar
                 Some(c) => {
+                    literal.push(*c);
                     pos += 1;
                     if c.is_ascii_control() {
-                        return (Token::new(IllegalToken, start, pos), pos);
+                        return (Token::new(IllegalToken, literal, start, pos), pos);
                     } else if *c == '\\' {
-                        match lex_after_bs(input, pos) {
-                            Ok(pos_new) => pos = pos_new,
+                        match lex_after_bs(input, pos, &mut literal) {
+                            Ok(pos_new) => {
+                                pos = pos_new;
+                            }
                             Err(pos_new) => {
-                                return (Token::new(IllegalToken, start, pos_new), pos_new);
+                                return (
+                                    Token::new(IllegalToken, literal, start, pos_new),
+                                    pos_new,
+                                );
                             }
                         }
                     } else {
@@ -183,34 +203,39 @@ where
                     }
                 }
                 // 閉じられていない
-                None => return (Token::new(IllegalToken, start, pos), pos),
+                None => return (Token::new(IllegalToken, literal, start, pos), pos),
             }
         }
     }
 }
 
 // `\`以降の文字
-fn lex_after_bs<'a, Tokens>(input: &mut Peekable<Tokens>, start: usize) -> Result<usize, usize>
+fn lex_after_bs<'a, Tokens>(
+    input: &mut Peekable<Tokens>,
+    start: usize,
+    literal: &mut String,
+) -> Result<usize, usize>
 where
     Tokens: Iterator<Item = &'a char>,
 {
     let mut pos = start;
-
     match input.next() {
         //  `\`のあとが切れている.
         None => Err(pos),
         Some(escape) => {
+            literal.push(*escape);
             pos = pos + 1;
             match escape {
                 // パース継続
                 '\"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => Ok(pos),
                 //`\u1234`
                 'u' => {
-                    let hex_4 = input.take(4).map(|&c| c).collect::<Vec<char>>();
+                    let hex_4 = input.take(4).map(|&c| c).collect::<String>();
+                    literal.push_str(&hex_4);
                     pos = pos + hex_4.len();
                     if hex_4.len() != 4 {
                         Err(pos)
-                    } else if hex_4.iter().all(|h| h.is_ascii_hexdigit()) == false {
+                    } else if hex_4.chars().all(|h| h.is_ascii_hexdigit()) == false {
                         Err(pos)
                     } else {
                         Ok(pos)
@@ -225,56 +250,58 @@ where
 
 #[test]
 fn lex_digit1() {
-    let token = Token::new(TokenKind::Digits, 1, 4);
-    let expect = vec![token];
     let input = " 123 ";
-    assert_eq!(expect, lex(&input).0);
+    let token = Token::new(TokenKind::Digits, String::from(input.trim()), 1, 4);
+    let expect = vec![token];
+    assert_eq!(expect, lex(&input));
 }
 #[test]
 fn lex_digit2() {
-    let token = Token::new(TokenKind::Digits, 0, 1);
-    let expect = vec![token];
     let input = "1  ";
-    assert_eq!(expect, lex(&input).0);
+    let token = Token::new(TokenKind::Digits, String::from(input.trim()), 0, 1);
+    let expect = vec![token];
+    assert_eq!(expect, lex(&input));
 }
 
 #[test]
 fn lex_digit_and_char1() {
-    let token = Token::new(TokenKind::Digits, 0, 1);
-    let mut expect = vec![token];
-    expect.push(Token::new(TokenKind::CharSeq, 3, 6));
     let input = "1  abc";
-    assert_eq!(expect, lex(&input).0);
+    let expect = vec![
+        Token::new(TokenKind::Digits, "1".to_string(), 0, 1),
+        Token::new(TokenKind::CharSeq, "abc".to_string(), 3, 6),
+    ];
+    assert_eq!(expect, lex(&input));
 }
 #[test]
 fn lex_digit_and_char2() {
-    let token = Token::new(TokenKind::CharSeq, 0, 3);
-    let mut expect = vec![token];
-    expect.push(Token::new(TokenKind::Digits, 3, 4));
     let input = "abc2";
-    assert_eq!(expect, lex(&input).0);
+    let expect = vec![
+        Token::new(TokenKind::CharSeq, "abc".to_string(), 0, 3),
+        Token::new(TokenKind::Digits, "2".to_string(), 3, 4),
+    ];
+    assert_eq!(expect, lex(&input));
 }
 #[test]
 fn lex_symbols() {
     use TokenKind::*;
     let input = r#"{}[]"#;
     let expect = vec![
-        Token::new(LBrace, 0, 1),
-        Token::new(RBrace, 1, 2),
-        Token::new(LBracket, 2, 3),
-        Token::new(RBracket, 3, 4),
+        Token::new(LBrace, "{".to_string(), 0, 1),
+        Token::new(RBrace, "}".to_string(), 1, 2),
+        Token::new(LBracket, String::from("["), 2, 3),
+        Token::new(RBracket, String::from("]"), 3, 4),
     ];
-    assert_eq!(expect, lex(input).0);
+    assert_eq!(expect, lex(input));
 }
 
 #[test]
 fn lex_strbody_ok() {
     use TokenKind::*;
     let inputs = vec![
-        //
-        r#""""#, //
         // 012
         r#""key""#, //
+        //
+        r#""""#, //
         // 012345
         r#"" ""#,
         // 0123
@@ -290,59 +317,14 @@ fn lex_strbody_ok() {
         // 0123          E
     ];
     let expect = vec![
-        ///
-        Token::new(StrBody, 0, 2), //
-        Token::new(StrBody, 0, 5),  //
-        Token::new(StrBody, 0, 3),  //
-        Token::new(StrBody, 0, 15), //
-        Token::new(StrBody, 0, 14), //
-        Token::new(StrBody, 0, 14), //
-        Token::new(StrBody, 0, 14), //
-        Token::new(StrBody, 0, 14), //
-    ];
-
-    for (i, input) in inputs.iter().enumerate() {
-        let input = input.chars().collect::<Vec<char>>();
-        let mut input = input.iter().peekable();
-        assert_eq!(expect[i], lex_strbody(&mut input, 0).0);
-    }
-}
-#[test]
-fn lex_strbody_ng() {
-    use TokenKind::*;
-    let inputs = vec![
-        // 終端の"がない
-        //   空白
-        r#"""#, //
-        //   1文字
-        r#""a"#, //
-        //   bsのあと
-        r#""\"#, //
-        //   エスケープ文字のあと
-        r#""\""#, //
-        r#""\\"#, //
-        r#""\n"#, //
-        // ユニコードのあと
-        r#""\u1234"#, //
-        // 許可してないエスケープ
-        r#""\a""#, //
-        // ユニコード不足
-        r#""\u123 ""#, //
-        // ユニコード異常
-        r#""\u123g""#, //
-    ];
-    let expect = vec![
-        ///
-        Token::new(IllegalToken, 0, 1), //
-        Token::new(IllegalToken, 0, 2), //
-        Token::new(IllegalToken, 0, 2), //
-        Token::new(IllegalToken, 0, 3), //
-        Token::new(IllegalToken, 0, 3), //
-        Token::new(IllegalToken, 0, 3), //
-        Token::new(IllegalToken, 0, 7), //
-        Token::new(IllegalToken, 0, 3), //
-        Token::new(IllegalToken, 0, 7), //
-        Token::new(IllegalToken, 0, 7), //
+        Token::new(StrBody, String::from(inputs[0].trim()), 0, 5), //
+        Token::new(StrBody, String::from(inputs[1].trim()), 0, 2), //
+        Token::new(StrBody, String::from(inputs[2].trim()), 0, 3), //
+        Token::new(StrBody, String::from(inputs[3].trim()), 0, 15), //
+        Token::new(StrBody, String::from(inputs[4].trim()), 0, 14), //
+        Token::new(StrBody, String::from(inputs[5].trim()), 0, 14), //
+        Token::new(StrBody, String::from(inputs[6].trim()), 0, 14), //
+        Token::new(StrBody, String::from(inputs[7].trim()), 0, 14), //
     ];
 
     for (i, input) in inputs.iter().enumerate() {
@@ -356,8 +338,56 @@ fn lex_strbody_ng() {
 fn lex_strbody_check() {
     use TokenKind::*;
     let input = r#""ab\u1234""#;
-    let expect = Token::new(StrBody, 0, 10);
+    let expect = Token::new(StrBody, String::from(input), 0, 10);
     let input = input.chars().collect::<Vec<char>>();
     let mut input = input.iter().peekable();
     assert_eq!(expect, lex_strbody(&mut input, 0).0);
+}
+
+#[test]
+fn lex_strbody_ng() {
+    use TokenKind::*;
+    let inputs = vec![
+        // 終端の"が不足
+        //   空白
+        r#"""#, //   "
+        //   1文字
+        r#""a"#, //  "a
+        //   bsのあと
+        r#""\"#, //  "\
+        //   エスケープ文字のあと
+        r#""\""#, // "\"
+        //
+        r#""\\"#, // "\\
+        //
+        r#""\n"#, // "\n
+        //   ユニコードのあと
+        r#""\u1234"#, //
+        //
+        // その他の不正
+        //   許可してないエスケープ
+        r#""\a""#, //
+        //   コード不足
+        r#""\u123 ""#, //
+        //   ユニコード異常
+        r#""\u123g""#, //
+    ];
+    let expect = vec![
+        Token::new(IllegalToken, String::from(inputs[0]), 0, 1), //
+        Token::new(IllegalToken, String::from(inputs[1]), 0, 2), //
+        Token::new(IllegalToken, String::from(inputs[2]), 0, 2), //
+        Token::new(IllegalToken, String::from(inputs[3]), 0, 3), //
+        Token::new(IllegalToken, String::from(inputs[4]), 0, 3), //
+        Token::new(IllegalToken, String::from(inputs[5]), 0, 3), //
+        Token::new(IllegalToken, String::from(inputs[6]), 0, 7), //
+        Token::new(IllegalToken, String::from("\"\\a"), 0, 3),   //
+        Token::new(IllegalToken, String::from("\"\\u123 "), 0, 7), //
+        Token::new(IllegalToken, String::from("\"\\u123g"), 0, 7), //
+    ];
+
+    for (i, input) in inputs.iter().enumerate() {
+        let input = input.chars().collect::<Vec<char>>();
+        let mut input = input.iter().peekable();
+        assert_eq!(expect[i], lex_strbody(&mut input, 0).0);
+    }
 }
