@@ -167,8 +167,8 @@ where
         (Token::new(IllegalToken, literal, start, pos), pos)
     } else if let Some('"') = input.peek() {
         // 空文字列
-        let c = input.next().unwrap();
-        literal.push(*c);
+        input.next().unwrap();
+        literal.push('"');
         pos += 1;
         (Token::new(StrBody, literal, start, pos), pos)
     } else {
