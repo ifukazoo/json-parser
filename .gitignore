@@ -1,2 +1,6 @@
 /target
 .vscode
+
+MOCK_DATA.json
+json
+.DS_Store
